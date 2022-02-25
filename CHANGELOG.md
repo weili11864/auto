@@ -1,3 +1,93 @@
+# v10.32.6 (Thu Jan 20 2022)
+
+#### 🐛 Bug Fix
+
+- `@auto-it/sbt`
+  - sbt: Avoid clobbering unrelated version settings [#2067](https://github.com/intuit/auto/pull/2067) ([@torkjel](https://github.com/torkjel))
+
+#### Authors: 1
+
+- Torkjel Hongve ([@torkjel](https://github.com/torkjel))
+
+---
+
+# v10.32.5 (Fri Dec 10 2021)
+
+:tada: This release contains work from a new contributor! :tada:
+
+Thank you, yogesh khandelwal ([@ykhandelwal913](https://github.com/ykhandelwal913)), for all your work!
+
+#### 🐛 Bug Fix
+
+- `@auto-it/gradle`
+  - Reordering the task to avoid the snapshotCheck failure [#2118](https://github.com/intuit/auto/pull/2118) ([@yogeshkhandelwal](https://github.com/yogeshkhandelwal) [@ykhandelwal913](https://github.com/ykhandelwal913))
+
+#### Authors: 2
+
+- [@yogeshkhandelwal](https://github.com/yogeshkhandelwal)
+- yogesh khandelwal ([@ykhandelwal913](https://github.com/ykhandelwal913))
+
+---
+
+# v10.32.4 (Fri Dec 10 2021)
+
+:tada: This release contains work from new contributors! :tada:
+
+Thanks for all your work!
+
+:heart: null[@yogeshkhandelwal](https://github.com/yogeshkhandelwal)
+
+:heart: yogesh khandelwal ([@ykhandelwal913](https://github.com/ykhandelwal913))
+
+:heart: Andreas Weichselbaum ([@AndreasWeichselbaum](https://github.com/AndreasWeichselbaum))
+
+### Release Notes
+
+#### fixing gradle issue ([#2116](https://github.com/intuit/auto/pull/2116))
+
+This release fixes the Gradle plugin ([#2608](https://github.com/intuit/auto/issues/2068)) for Gradle 6.8+.
+
+---
+
+#### 🐛 Bug Fix
+
+- `@auto-it/gradle`
+  - fixing gradle issue [#2116](https://github.com/intuit/auto/pull/2116) ([@yogeshkhandelwal](https://github.com/yogeshkhandelwal) [@ykhandelwal913](https://github.com/ykhandelwal913))
+
+#### 📝 Documentation
+
+- Expand default label configuration by default in Docs [#2060](https://github.com/intuit/auto/pull/2060) ([@AndreasWeichselbaum](https://github.com/AndreasWeichselbaum))
+
+#### Authors: 3
+
+- [@yogeshkhandelwal](https://github.com/yogeshkhandelwal)
+- Andreas Weichselbaum ([@AndreasWeichselbaum](https://github.com/AndreasWeichselbaum))
+- yogesh khandelwal ([@ykhandelwal913](https://github.com/ykhandelwal913))
+
+---
+
+# v10.32.3 (Mon Nov 22 2021)
+
+:tada: This release contains work from a new contributor! :tada:
+
+Thank you, Mathieu Bergeron ([@mathieubergeron](https://github.com/mathieubergeron)), for all your work!
+
+#### 🐛 Bug Fix
+
+- `@auto-it/microsoft-teams`
+  - fix(plugin/microsoft-teams): incorrect markdown rendering [#2080](https://github.com/intuit/auto/pull/2080) ([@mathieubergeron](https://github.com/mathieubergeron))
+
+#### 📝 Documentation
+
+- Minor README.md typo [#2106](https://github.com/intuit/auto/pull/2106) ([@orta](https://github.com/orta))
+
+#### Authors: 2
+
+- Mathieu Bergeron ([@mathieubergeron](https://github.com/mathieubergeron))
+- Orta Therox ([@orta](https://github.com/orta))
+
+---
+
 # v10.32.2 (Tue Oct 26 2021)
 
 #### 🐛 Bug Fix
