@@ -36,7 +36,6 @@ import setTokenOnCI, { getRegistry, DEFAULT_REGISTRY } from "./set-npm-token";
 import { writeFile, isMonorepo, readFile, getLernaJson } from "./utils";
 
 const { isCi } = envCi();
-const VERSION_COMMIT_MESSAGE = `'"Bump version to: %s [skip ci]"'`;
 
 /** Get the last published version for a npm package */
 async function getPublishedVersion(name: string) {
@@ -52,7 +51,7 @@ async function getPublishedVersion(name: string) {
 }
 
 /**
- * Determine the greatest version between last published version of a
+ * Determine the greatest version between @latest published version of a
  * package and the version in the package.json.
  */
 export async function greaterRelease(
@@ -64,6 +63,13 @@ export async function greaterRelease(
   const publishedVersion = await getPublishedVersion(name);
 
   if (!publishedVersion) {
+    return packageVersion;
+  }
+
+  // If @latest published version is a pre-release,
+  // this means the package has not been published as a stable tag yet
+  // Prefer local version to prevent a new package from adjusting the versions for a whole monorepo.
+  if (prerelease(publishedVersion) !== null) {
     return packageVersion;
   }
 
@@ -146,7 +152,6 @@ export async function getChangedPackages({
   return [...changed];
 }
 
-
 /** Get the package with the greatest version in a monorepo */
 export function getMonorepoPackage() {
   const packages = getPackages(process.cwd());
@@ -156,7 +161,9 @@ export function getMonorepoPackage() {
   }
 
   // Remove pre-releases so that released package versions take precedence
-  let releasedPackages = packages.filter(subPackage => prerelease(subPackage.package?.version || '') === null);
+  let releasedPackages = packages.filter(
+    (subPackage) => prerelease(subPackage.package?.version || "") === null
+  );
   // If doing this would remove all packages, this means were not any @latest releases yet
   // In that case, restore the original list of packages.
   if (releasedPackages.length === 0) {
@@ -207,16 +214,13 @@ async function bumpLatest(
   return latestVersion ? inc(latestVersion, version as ReleaseType) : version;
 }
 
-interface GetLegacyAuthArgsOptions {
+interface GetArgsOptions {
   /** whether the project is a monorepo */
   isMonorepo?: boolean;
 }
 
 /** Get the args to use legacy auth */
-function getLegacyAuthArgs(
-  useLegacy: boolean,
-  options: GetLegacyAuthArgsOptions = {}
-) {
+function getLegacyAuthArgs(useLegacy: boolean, options: GetArgsOptions = {}) {
   if (!useLegacy) {
     return [];
   }
@@ -224,6 +228,18 @@ function getLegacyAuthArgs(
   return options.isMonorepo
     ? ["--legacy-auth", process.env.NPM_TOKEN]
     : [`--_auth=${process.env.NPM_TOKEN}`];
+}
+
+/** Get args for publishFolder */
+function getPublishFolderArgs(
+  publishFolder: string | undefined,
+  options: GetArgsOptions = {}
+) {
+  if (!publishFolder) {
+    return [];
+  }
+
+  return options.isMonorepo ? ["--contents", publishFolder] : [publishFolder];
 }
 
 /** Get the args to set the registry. Only used with lerna */
@@ -255,6 +271,12 @@ const pluginOptions = t.partial({
   legacyAuth: t.boolean,
   /** Whether to add package information to monorepo changelogs */
   monorepoChangelog: t.boolean,
+  /**
+   * Path used when publishing packages.
+   * When used with npm this is equivalent to npm publish <publishFolder>
+   * When used with lerna this is equivalent to lerna publish --contents <publishFolder>
+   */
+  publishFolder: t.string,
 });
 
 export type INpmConfig = t.TypeOf<typeof pluginOptions>;
@@ -264,7 +286,11 @@ const markdownList = (lines: string[]) =>
   lines.map((line) => `- \`${line}\``).join("\n");
 
 /** Get the previous version. Typically from a package distribution description file. */
-async function getPreviousVersion(auto: Auto, prereleaseBranch: string, isMaintenanceBranch: boolean) {
+async function getPreviousVersion(
+  auto: Auto,
+  prereleaseBranch: string,
+  isMaintenanceBranch: boolean
+) {
   let previousVersion = "";
 
   if (isMonorepo()) {
@@ -281,7 +307,10 @@ async function getPreviousVersion(auto: Auto, prereleaseBranch: string, isMainte
     } else {
       const releasedPackage = getMonorepoPackage();
 
-      if (isMaintenanceBranch || (!releasedPackage.name && !releasedPackage.version)) {
+      if (
+        isMaintenanceBranch ||
+        (!releasedPackage.name && !releasedPackage.version)
+      ) {
         previousVersion = auto.prefixRelease(monorepoVersion);
       } else {
         previousVersion = await greaterRelease(
@@ -297,8 +326,8 @@ async function getPreviousVersion(auto: Auto, prereleaseBranch: string, isMainte
       "Using package.json to calculate previous version"
     );
     const { version, name } = await loadPackageJson();
-    if(isMaintenanceBranch && version) {
-      previousVersion = version
+    if (isMaintenanceBranch && version) {
+      previousVersion = version;
     } else {
       previousVersion = version
         ? await greaterRelease(
@@ -567,6 +596,8 @@ export default class NPMPlugin implements IPlugin {
   private readonly legacyAuth: boolean;
   /** Whether to use legacy auth for npm */
   private readonly commitNextVersion: boolean;
+  /** Path used when publishing packages */
+  private readonly publishFolder: string | undefined;
 
   /** Initialize the plugin with it's options */
   constructor(config: INpmConfig = {}) {
@@ -578,6 +609,7 @@ export default class NPMPlugin implements IPlugin {
     this.forcePublish = config.forcePublish ?? true;
     this.commitNextVersion = config.commitNextVersion ?? false;
     this.canaryScope = config.canaryScope || undefined;
+    this.publishFolder = config.publishFolder || undefined;
   }
 
   /** A memoized version of getLernaPackages */
@@ -673,8 +705,12 @@ export default class NPMPlugin implements IPlugin {
 
     let isMaintenanceBranch = false;
 
-    if(auto.config?.versionBranches && branch) {
-      isMaintenanceBranch = branch.includes(typeof auto.config.versionBranches === "boolean" ? "version-" : auto.config.versionBranches)
+    if (auto.config?.versionBranches && branch) {
+      isMaintenanceBranch = branch.includes(
+        typeof auto.config.versionBranches === "boolean"
+          ? "version-"
+          : auto.config.versionBranches
+      );
     }
 
     auto.hooks.validateConfig.tapPromise(this.name, async (name, options) => {
@@ -781,10 +817,13 @@ export default class NPMPlugin implements IPlugin {
             }
 
             // Allows us to see the commit being assessed
-            auto.logger.veryVerbose.info(`Rendering changelog line for commit:`, commit)
+            auto.logger.veryVerbose.info(
+              `Rendering changelog line for commit:`,
+              commit
+            );
 
             // adds commits to changelog only if hash is resolvable
-            if(!commit || !commit.hash) {
+            if (!commit || !commit.hash) {
               return line;
             }
 
@@ -856,7 +895,7 @@ export default class NPMPlugin implements IPlugin {
 
     auto.hooks.beforeCommitChangelog.tapPromise(
       this.name,
-      async ({ commits, bump }) => {
+      async ({ commits, bump, useVersion }) => {
         if (!isMonorepo() || !auto.release || !this.subPackageChangelogs) {
           return;
         }
@@ -895,7 +934,9 @@ export default class NPMPlugin implements IPlugin {
           const includedCommits = commits.filter((commit) =>
             commit.files.some((file) => inFolder(lernaPackage.path, file))
           );
-          const title = `v${inc(lernaPackage.version, bump as ReleaseType)}`;
+          const title = `v${
+            useVersion || inc(lernaPackage.version, bump as ReleaseType)
+          }`;
           const releaseNotes = await changelog.generateReleaseNotes(
             includedCommits
           );
@@ -929,7 +970,8 @@ export default class NPMPlugin implements IPlugin {
 
         if (isMonorepo()) {
           auto.logger.verbose.info("Detected monorepo, using lerna");
-          const monorepoVersion = getLernaJson().version;
+          const lernaJson = getLernaJson();
+          const monorepoVersion = lernaJson.version;
           const isIndependent = monorepoVersion === "independent";
 
           if (dryRun) {
@@ -955,7 +997,9 @@ export default class NPMPlugin implements IPlugin {
 
               logVersion(canaryPackageList.join("\n"));
             } else {
-              logVersion(useVersion || inc(monorepoVersion, bump as ReleaseType) || bump);
+              logVersion(
+                useVersion || inc(monorepoVersion, bump as ReleaseType) || bump
+              );
             }
 
             return;
@@ -964,7 +1008,23 @@ export default class NPMPlugin implements IPlugin {
           const monorepoBump =
             isIndependent || !isBaseBranch
               ? useVersion || bump
-              : useVersion || (await bumpLatest(getMonorepoPackage(), bump)) || bump;
+              : useVersion ||
+                (await bumpLatest(getMonorepoPackage(), bump)) ||
+                bump;
+
+          let commitMessage = isIndependent
+            ? "Bump independent versions [skip ci]"
+            : "Bump version to: %s [skip ci]";
+
+          const customCommitMessage = lernaJson.command?.version?.message;
+
+          if (typeof customCommitMessage === "string") {
+            commitMessage = customCommitMessage.trim();
+
+            if (customCommitMessage.indexOf("[skip ci]") === -1) {
+              commitMessage += " [skip ci]";
+            }
+          }
 
           await execPromise("npx", [
             "lerna",
@@ -975,9 +1035,7 @@ export default class NPMPlugin implements IPlugin {
             "--yes",
             "--no-push",
             "-m",
-            isIndependent
-              ? `'"Bump independent versions [skip ci]"'`
-              : VERSION_COMMIT_MESSAGE,
+            `'"${commitMessage}"'`,
             this.exact && "--exact",
             ...verboseArgs,
           ]);
@@ -986,7 +1044,9 @@ export default class NPMPlugin implements IPlugin {
         }
 
         const latestBump = isBaseBranch
-          ? useVersion || (await bumpLatest(await loadPackageJson(), bump)) || bump
+          ? useVersion ||
+            (await bumpLatest(await loadPackageJson(), bump)) ||
+            bump
           : useVersion || bump;
 
         if (dryRun) {
@@ -999,7 +1059,7 @@ export default class NPMPlugin implements IPlugin {
           latestBump,
           "--no-commit-hooks",
           "-m",
-          VERSION_COMMIT_MESSAGE,
+          "'Bump version to: %s [skip ci]'",
           ...verboseArgs,
         ]);
         auto.logger.verbose.info("Successfully versioned repo");
@@ -1099,6 +1159,7 @@ export default class NPMPlugin implements IPlugin {
             "--dist-tag",
             "canary",
             ...(await getRegistryArgs()),
+            ...getPublishFolderArgs(this.publishFolder, { isMonorepo: true }),
             !isIndependent && "--force-publish",
             ...getLegacyAuthArgs(this.legacyAuth, { isMonorepo: true }),
             "--yes", // skip prompts,
@@ -1187,6 +1248,7 @@ export default class NPMPlugin implements IPlugin {
         const publishArgs = ["--tag", "canary"];
         await execPromise("npm", [
           "publish",
+          ...getPublishFolderArgs(this.publishFolder), // this is a positional parameter
           ...publishArgs,
           ...verboseArgs,
           ...getLegacyAuthArgs(this.legacyAuth),
@@ -1216,7 +1278,11 @@ export default class NPMPlugin implements IPlugin {
         const lastRelease = await auto.git!.getLatestRelease();
         const latestTag =
           (await auto.git?.getLastTagNotInBaseBranch(prereleaseBranch)) ||
-          (await getPreviousVersion(auto, prereleaseBranch, isMaintenanceBranch));
+          (await getPreviousVersion(
+            auto,
+            prereleaseBranch,
+            isMaintenanceBranch
+          ));
 
         if (isMonorepo()) {
           auto.logger.verbose.info("Detected monorepo, using lerna");
@@ -1279,6 +1345,7 @@ export default class NPMPlugin implements IPlugin {
             // you always want a next version to publish
             !isIndependent && "--force-publish",
             ...(await getRegistryArgs()),
+            ...getPublishFolderArgs(this.publishFolder, { isMonorepo: true }),
             ...getLegacyAuthArgs(this.legacyAuth, { isMonorepo: true }),
             // skip prompts
             "--yes",
@@ -1359,6 +1426,7 @@ export default class NPMPlugin implements IPlugin {
           } else {
             await execPromise("npm", [
               "publish",
+              ...getPublishFolderArgs(this.publishFolder), // this is a positional parameter
               "--tag",
               prereleaseBranch,
               ...verboseArgs,
@@ -1412,7 +1480,9 @@ export default class NPMPlugin implements IPlugin {
           this.exact && "--exact",
           ...verboseArgs,
           ...(await getRegistryArgs()),
+          ...getPublishFolderArgs(this.publishFolder, { isMonorepo: true }),
           ...getLegacyAuthArgs(this.legacyAuth, { isMonorepo: true }),
+          "--no-verify-access", // permit automation tokens https://github.com/lerna/lerna/issues/2788
         ]);
       } else {
         const { private: isPrivate } = await loadPackageJson();
@@ -1422,6 +1492,7 @@ export default class NPMPlugin implements IPlugin {
         } else {
           await execPromise("npm", [
             "publish",
+            ...getPublishFolderArgs(this.publishFolder), // this is a positional parameter
             ...tag,
             ...verboseArgs,
             ...getLegacyAuthArgs(this.legacyAuth),

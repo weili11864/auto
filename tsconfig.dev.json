@@ -91,6 +91,12 @@
     },
     {
       "path": "plugins/sbt"
+    },
+    {
+      "path": "plugins/version-file"
+    },
+    {
+      "path": "plugins/protected-branch"
     }
   ]
 }

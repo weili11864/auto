@@ -183,6 +183,12 @@ describe("greaterRelease", () => {
       await greaterRelease(prefixRelease, "test-package-name", "1.0.0")
     ).toBe("1.0.1");
   });
+  test("should default to packageVersion if (publishedVersion is greater, but is a pre-release)", async () => {
+    execPromise.mockReturnValueOnce("1.0.1-next.0");
+    expect(
+      await greaterRelease(prefixRelease, "test-package-name", "1.0.0")
+    ).toBe("1.0.0");
+  });
 });
 
 describe("getAuthor", () => {
@@ -545,7 +551,7 @@ describe("publish", () => {
       Auto.SEMVER.patch,
       "--no-commit-hooks",
       "-m",
-      "'\"Bump version to: %s [skip ci]\"'",
+      "'Bump version to: %s [skip ci]'",
       "--loglevel",
       "silly",
     ]);
@@ -576,7 +582,7 @@ describe("publish", () => {
       Auto.SEMVER.patch,
       "--no-commit-hooks",
       "-m",
-      "'\"Bump version to: %s [skip ci]\"'",
+      "'Bump version to: %s [skip ci]'",
     ]);
   });
 
@@ -675,6 +681,7 @@ describe("publish", () => {
       "--yes",
       "from-package",
       "--exact",
+      "--no-verify-access"
     ]);
   });
 
@@ -697,6 +704,7 @@ describe("publish", () => {
       "--yes",
       "from-package",
       false,
+      "--no-verify-access"
     ]);
   });
 
@@ -722,6 +730,32 @@ describe("publish", () => {
       false,
       "--legacy-auth",
       "abcd",
+      "--no-verify-access"
+    ]);
+  });
+
+  test("monorepo - should use publishFolder", async () => {
+    const plugin = new NPMPlugin({ publishFolder: "dist/publish-folder" });
+    const hooks = makeHooks();
+
+    plugin.apply({
+      config: { prereleaseBranches: ["next"] },
+      hooks,
+      remote: "origin",
+      baseBranch: "main",
+      logger: dummyLog(),
+    } as Auto.Auto);
+
+    await hooks.publish.promise({ bump: Auto.SEMVER.patch });
+    expect(execPromise).toHaveBeenCalledWith("npx", [
+      "lerna",
+      "publish",
+      "--yes",
+      "from-package",
+      false,
+      "--contents",
+      "dist/publish-folder",
+      "--no-verify-access"
     ]);
   });
 
@@ -755,6 +789,35 @@ describe("publish", () => {
     ]);
   });
 
+  test("should use publishFolder", async () => {
+    mockFs({
+      "package.json": `
+        {
+          "name": "test",
+          "version": "0.0.0"
+        }
+      `,
+    });
+    const plugin = new NPMPlugin({ publishFolder: "dist/publish-folder" });
+    const hooks = makeHooks();
+
+    plugin.apply({
+      config: { prereleaseBranches: ["next"] },
+      hooks,
+      remote: "origin",
+      baseBranch: "main",
+      logger: dummyLog(),
+    } as Auto.Auto);
+
+    execPromise.mockReturnValueOnce("1.0.0");
+
+    await hooks.publish.promise({ bump: Auto.SEMVER.patch });
+    expect(execPromise).toHaveBeenCalledWith("npm", [
+      "publish",
+      "dist/publish-folder",
+    ]);
+  });
+
   test("should bump published version", async () => {
     mockFs({
       "package.json": `
@@ -783,7 +846,7 @@ describe("publish", () => {
       "1.0.1",
       "--no-commit-hooks",
       "-m",
-      "'\"Bump version to: %s [skip ci]\"'",
+      "'Bump version to: %s [skip ci]'",
     ]);
   });
 
@@ -813,6 +876,92 @@ describe("publish", () => {
       "--no-push",
       "-m",
       "'\"Bump version to: %s [skip ci]\"'",
+      false,
+    ]);
+  });
+
+  test("monorepo - should use commit message from lerna.json", async () => {
+    mockFs({
+      "lerna.json": `
+        {
+          "command": {
+            "version": {
+              "message": "[skip ci] Custom version commit message"
+            }
+          }
+        }
+      `,
+      ...monorepoPackagesOnFs,
+    });
+
+    const plugin = new NPMPlugin();
+    const hooks = makeHooks();
+
+    plugin.apply({
+      config: { prereleaseBranches: ["next"] },
+      hooks,
+      remote: "origin",
+      baseBranch: "main",
+      logger: dummyLog(),
+    } as Auto.Auto);
+
+    monorepoPackages.mockReturnValueOnce(monorepoPackagesResult);
+    execPromise.mockReturnValueOnce("1.0.0");
+
+    await hooks.version.promise({ bump: Auto.SEMVER.patch });
+    expect(execPromise).toHaveBeenNthCalledWith(2, "npx", [
+      "lerna",
+      "version",
+      "1.0.1",
+      "--force-publish",
+      "--no-commit-hooks",
+      "--yes",
+      "--no-push",
+      "-m",
+      "'\"[skip ci] Custom version commit message\"'",
+      false,
+    ]);
+  });
+
+  test("monorepo - should ensure commit message from lerna.json contains [skip ci]", async () => {
+    mockFs({
+      "lerna.json": `
+        {
+          "command": {
+            "version": {
+              "message": "Custom version commit message"
+            }
+          }
+        }
+      `,
+      ...monorepoPackagesOnFs,
+    });
+
+    const plugin = new NPMPlugin();
+    const hooks = makeHooks();
+
+    plugin.apply({
+      config: { prereleaseBranches: ["next"] },
+      hooks,
+      remote: "origin",
+      baseBranch: "main",
+      logger: dummyLog(),
+    } as Auto.Auto);
+
+    monorepoPackages.mockReturnValueOnce(monorepoPackagesResult);
+    execPromise.mockReturnValueOnce("1.0.0");
+
+    await hooks.version.promise({ bump: Auto.SEMVER.patch });
+    expect(execPromise).toHaveBeenNthCalledWith(2, "npx", [
+      "lerna",
+      "version",
+      "1.0.1",
+      "--force-publish",
+      "--no-commit-hooks",
+      "--yes",
+      "--no-push",
+      "-m",
+      "'\"Custom version commit message [skip ci]\"'",
       false,
     ]);
   });
@@ -1021,6 +1170,95 @@ describe("canary", () => {
       "--tag",
       "canary",
       "--_auth=abcd",
+    ]);
+  });
+
+  test("should use publishFolder", async () => {
+    mockFs({
+      "package.json": `
+        {
+          "name": "test"
+        }
+      `,
+    });
+    const plugin = new NPMPlugin({ publishFolder: "dist/publish-folder" });
+    const hooks = makeHooks();
+
+    plugin.apply(({
+      config: { prereleaseBranches: ["next"] },
+      hooks,
+      remote: "origin",
+      baseBranch: "main",
+      logger: dummyLog(),
+      getCurrentVersion: () => "1.2.3",
+      git: {
+        getLatestRelease: () => "1.2.3",
+        getLatestTagInBranch: () => Promise.resolve("1.2.3"),
+      },
+    } as unknown) as Auto.Auto);
+
+    await hooks.canary.promise({
+      bump: Auto.SEMVER.patch,
+      canaryIdentifier: "canary.123.1",
+    });
+    expect(execPromise).toHaveBeenCalledWith("npm", [
+      "publish",
+      "dist/publish-folder",
+      "--tag",
+      "canary",
+    ]);
+  });
+
+  test("monorepo - should use publishFolder", async () => {
+    const plugin = new NPMPlugin({ publishFolder: "dist/publish-folder" });
+    const hooks = makeHooks();
+
+    plugin.apply({
+      config: { prereleaseBranches: ["next"] },
+      hooks,
+      remote: "origin",
+      baseBranch: "main",
+      logger: dummyLog(),
+      git: {
+        getLatestRelease: () => Promise.resolve("1.2.3"),
+        getLatestTagInBranch: () => Promise.resolve("1.2.3"),
+      },
+    } as any);
+
+    const packages = [
+      {
+        path: "path/to/package",
+        name: "@foobar/app",
+        version: "1.2.3-canary.0+abcd",
+      },
+      {
+        path: "path/to/package",
+        name: "@foobar/lib",
+        version: "1.2.3-canary.0+abcd",
+      },
+    ];
+
+    monorepoPackages.mockReturnValueOnce(packages.map((p) => ({ package: p })));
+    getLernaPackages.mockImplementation(async () => Promise.resolve(packages));
+
+    await hooks.canary.promise({
+      bump: Auto.SEMVER.patch,
+      canaryIdentifier: "",
+    });
+    expect(execPromise).toHaveBeenCalledWith("npx", [
+      "lerna",
+      "publish",
+      "1.2.4-0",
+      "--dist-tag",
+      "canary",
+      "--contents",
+      "dist/publish-folder",
+      "--force-publish",
+      "--yes",
+      "--no-git-reset",
+      "--no-git-tag-version",
+      "--exact",
+      "--no-verify-access"
     ]);
   });
 

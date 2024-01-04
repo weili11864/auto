@@ -4,7 +4,7 @@
   "main": "dist/bin/index.js",
   "types": "dist/index.d.ts",
   "description": "CLI tools to help facilitate semantic versioning based on GitHub PR labels",
-  "version": "10.32.6",
+  "version": "11.0.4",
   "license": "MIT",
   "author": {
     "name": "Andrew Lisowski",
@@ -52,10 +52,11 @@
     "@auto-it/core": "link:../core",
     "@auto-it/npm": "link:../../plugins/npm",
     "@auto-it/released": "link:../../plugins/released",
+    "@auto-it/version-file": "link:../../plugins/version-file",
     "await-to-js": "^3.0.0",
     "chalk": "^4.0.0",
     "command-line-application": "^0.10.1",
-    "endent": "^2.0.1",
+    "endent": "^2.1.0",
     "module-alias": "^2.2.2",
     "signale": "^1.4.0",
     "terminal-link": "^2.1.1",
@@ -63,6 +64,6 @@
   },
   "devDependencies": {
     "@types/signale": "^1.2.1",
-    "pkg": "^4.4.0"
+    "pkg": "^5.8.0"
   }
 }

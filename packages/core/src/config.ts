@@ -105,8 +105,8 @@ export default class Config {
 
     if (rawConfig.extends) {
       rawConfig = merge(
-        rawConfig,
-        await this.loadExtendConfig(rawConfig.extends)
+        await this.loadExtendConfig(rawConfig.extends),
+        rawConfig
       );
     }
 
@@ -198,6 +198,15 @@ export default class Config {
 
       if (config) {
         config.extends = localPath;
+      }
+    }
+
+    if (!config) {
+      config = tryRequire(extend);
+      this.logger.verbose.note(`${extend} found: ${config}`);
+
+      if (config) {
+        config.extends = extend;
       }
     }
 
